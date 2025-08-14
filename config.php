@@ -14,7 +14,7 @@
 	define("CONFIG_FILE_PATH",APP_ROOT_ABS_PATH."/config.json");
 	define("APP_TIMEZONE","Asia/Jerusalem");
 	
-	define("DELETE_ERRORS_LOG_FILE_ON_START",true);
+	define("DELETE_ERRORS_LOG_FILE_ON_START",false);
 	
 	define("INI_SET_DISPLAY_ERRORS",1);
 	define("INI_SET_LOG_ERRORS",1);

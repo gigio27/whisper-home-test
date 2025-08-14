@@ -134,9 +134,25 @@
 		}		
 	}
 
-	$GLOBALS = [];
-	
+	// init safe, key for key
+	if (!isset($GLOBALS["modules"]) || !is_array($GLOBALS["modules"])) {
+		$GLOBALS["modules"] = [];
+	}
+	if (!isset($GLOBALS["plugins"]) || !is_array($GLOBALS["plugins"])) {
+		$GLOBALS["plugins"] = [];
+	}
+	if (!isset($GLOBALS["plugins"]["included_files"]) || !is_array($GLOBALS["plugins"]["included_files"])) {
+		$GLOBALS["plugins"]["included_files"] = [];
+	}
+	if (!isset($GLOBALS["app_timezone"]) || !is_array($GLOBALS["app_timezone"])) {
+		$GLOBALS["app_timezone"] = [];
+	}
+
+	// usualls values
 	$GLOBALS["php_now"] = date("Y-m-d H:i:s T");
-	$GLOBALS["app_timezone"]["php_date_timezone_returns"] = date("T");	
-	$GLOBALS["app_root_absolute_dir"] = __dir__;
+	$GLOBALS["app_timezone"]["php_date_timezone_returns"] = date("T");
+
+	$GLOBALS["app_root_abs_path"] = defined("APP_ROOT_ABS_PATH") ? APP_ROOT_ABS_PATH : __DIR__;
+
+
 ?>
