@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chat</title>
+<style>body{font-family:system-ui,Arial,sans-serif;max-width:760px;margin:24px auto;padding:0 16px}.msg{border:1px solid #eee;border-radius:12px;padding:10px;margin:8px 0}.meta{font-size:12px;color:#666}button{padding:8px 12px;border:1px solid #ccc;border-radius:10px;background:#fff;cursor:pointer}</style>
+</head><body>
+<h1>Chat</h1>
+<div><button id="logout">Log out</button></div>
+<audio id="snd" preload="auto"></audio>
+<div id="list"></div>
+<div style="display:flex;gap:8px;margin-top:12px;">
+  <input id="text" placeholder="Type a message…" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:10px"/>
+  <button id="send">Send</button>
+</div>
+<script>
+const token=localStorage.getItem('token'); if(!token) location.href='/login.html';
+const snd=document.getElementById('snd'); let soundEnabled=false; let lastCount=0;
+
+async function loadConfig(){ const r=await fetch('/api.php?data=get_config'); const j=await r.json(); if(j.config){ snd.src=j.config.notification_sound_url||''; soundEnabled=(j.config.notification_sound_enabled==='1'); } }
+async function getMsgs(){ const r=await fetch('/api.php?data=get_msgs',{method:'POST',body:new URLSearchParams({token})}); const j=await r.json(); return j.messages||[]; }
+function render(list){
+  const root=document.getElementById('list'); root.innerHTML='';
+  list.forEach(m=>{
+    const d=document.createElement('div'); d.className='msg';
+    d.innerHTML=`<div>${m.text ?? m.msg_body ?? ''}</div>
+    <div class="meta">From: ${m.sender_name ?? m.belongs_to_username ?? (m.is_from_me?'Me':'Contact')} · At: ${m.created_at ?? m.msg_datetime}
+      · <span class="rdr" data-id="${m.id ?? m.row_id}" style="text-decoration:underline;cursor:pointer">Seen by?</span>
+      · <button class="mk" data-id="${m.id ?? m.row_id}">Mark as read</button></div>`;
+    root.appendChild(d);
+  });
+  document.querySelectorAll('.rdr').forEach(el=>el.onclick=async()=>{
+    const id=el.dataset.id; const r=await fetch(`/api.php?data=get_readers&message_id=${id}&token=${encodeURIComponent(token)}`); const j=await r.json();
+    alert((j.readers||[]).map(x=>`${x.username} at ${x.read_at}`).join('\n') || 'No readers yet');
+  });
+  document.querySelectorAll('.mk').forEach(btn=>btn.onclick=async()=>{
+    const id=btn.dataset.id; const fd=new FormData(); fd.append('token',token); fd.append('message_id',id);
+    const r=await fetch('/api.php?data=mark_read',{method:'POST',body:fd}); if(r.ok) btn.textContent='Marked';
+  });
+}
+async function poll(){ const list=await getMsgs(); if(list.length>lastCount && soundEnabled && snd.src){ try{ snd.currentTime=0; await snd.play(); }catch{} } lastCount=list.length; render(list); }
+document.getElementById('send').onclick=async()=>{
+  const t=document.getElementById('text'); const v=t.value.trim(); if(!v) return;
+  const fd=new FormData(); fd.append('token',token); fd.append('text',v);
+  await fetch('/api.php?data=send_wa_txt_msg',{method:'POST',body:fd}); t.value=''; poll();
+};
+document.getElementById('logout').onclick=()=>{ localStorage.removeItem('token'); location.href='/login.html'; };
+(async()=>{ await loadConfig(); await poll(); setInterval(poll,5000); })();
+</script>
+</body></html>
