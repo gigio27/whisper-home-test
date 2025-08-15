@@ -17,17 +17,42 @@
 </div>
 <script>
 const $=id=>document.getElementById(id);
+
 $('req').onclick=async()=>{
   $('m1').textContent='Sending...';
-  const fd=new FormData(); fd.append('action','request_otp'); fd.append('email',$('email').value.trim()); fd.append('website',$('website').value);
-  const r=await fetch('/otp.php',{method:'POST',body:fd}); const j=await r.json();
-  $('m1').textContent=j.message||j.error||'Done'; if(j.dev_hint_otp) $('m1').textContent+=' (DEV: '+j.dev_hint_otp+')';
+  try{
+    const fd=new FormData();
+    fd.append('action','request_otp');
+    fd.append('email',$('email').value.trim());
+    fd.append('website',$('website').value);
+
+    const r=await fetch('otp.php',{method:'POST',body:fd}); // note: sans slash initial
+    const t=await r.text();
+    let j; try { j=JSON.parse(t); } catch (e) { j={ error:`request failed (${r.status})` }; }
+    $('m1').textContent=j.message||j.error||'Done';
+    if(j.dev_hint_otp) $('m1').textContent+=` (DEV: ${j.dev_hint_otp})`;
+  }catch(e){
+    console.error(e);
+    $('m1').textContent='Failed to send code';
+  }
 };
+
 $('ver').onclick=async()=>{
   $('m2').textContent='Verifying...';
-  const fd=new FormData(); fd.append('action','verify_otp'); fd.append('email',$('email').value.trim()); fd.append('otp',$('otp').value.trim());
-  const r=await fetch('/otp.php',{method:'POST',body:fd}); const j=await r.json();
-  if(j.token){ localStorage.setItem('token',j.token); location.href='/app.html'; } else { $('m2').textContent=j.error||'Failed'; }
+  try{
+    const fd=new FormData();
+    fd.append('action','verify_otp');
+    fd.append('email',$('email').value.trim());
+    fd.append('otp',$('otp').value.trim());
+    const r=await fetch('otp.php',{method:'POST',body:fd});
+    const t=await r.text();
+    let j; try { j=JSON.parse(t); } catch (e) { j={ error:`verify failed (${r.status})` }; }
+    if(j.token){ localStorage.setItem('token',j.token); location.href='app.html'; }
+    else { $('m2').textContent=j.error||'Failed'; }
+  }catch(e){
+    console.error(e);
+    $('m2').textContent='Verify failed';
+  }
 };
 </script>
 </body></html>

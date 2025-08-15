@@ -1,8 +1,16 @@
 <?php
+define('a328763fe27bba', true);
 require_once __DIR__ . "/config.php";
 
 /* helpers */
-function out($code, $data){ http_response_code($code); header('Content-Type: application/json'); echo json_encode($data, JSON_UNESCAPED_SLASHES); exit; }
+function out($code, $data){
+  if (ob_get_level()) { @ob_clean(); }
+  http_response_code($code);
+  header('Content-Type: application/json');
+  echo json_encode($data, JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
 function db(){ static $m=null; if(!$m){ $m=@new mysqli(MYSQL_DEFAULT_SERVERNAME,MYSQL_DEFAULT_USERNAME,MYSQL_DEFAULT_DB_PASSWORD,MYSQL_DEFAULT_DB_NAME); if($m->connect_errno) out(500,["error"=>"database connection failed"]); $m->set_charset("utf8mb4"); } return $m; }
 function cfg($k,$d=null){ $s=db()->prepare("SELECT value FROM config WHERE setting=?"); $s->bind_param("s",$k); $s->execute(); $s->bind_result($v); if($s->fetch()){ $s->close(); return $v; } $s->close(); return $d; }
 function rand_digits($n){ $s=""; for($i=0;$i<$n;$i++) $s.=random_int(0,9); return $s; }
