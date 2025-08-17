@@ -94,59 +94,102 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.4/jquery-confirm.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/plyr/3.7.8/plyr.min.js"></script>
 
+		<!-- auth + ajax token + 401 handler + logout -->
 		<script>
-			(function(){
-			// 1) token mandatory
-			const token = localStorage.getItem('token');
-			if(!token){ location.href = 'login.html'; return; }
+		(function(){
+		const token = localStorage.getItem('token');
+		if(!token){ location.href = '/login/'; return; }
 
-			// 2) play sound on new notification
-			const snd = document.getElementById('notify');
-			let soundEnabled = false;
+		// inject token into every jQuery call to api.php
+		$.ajaxPrefilter(function(options, original){
+			if(!options.url || options.url.indexOf('api.php') === -1) return;
+			if((options.type||'GET').toUpperCase()==='GET'){
+			options.url += (options.url.includes('?')?'&':'?') + 'token=' + encodeURIComponent(token);
+			}else{
+			if(original.data instanceof FormData){
+				original.data.append('token', token);
+				options.data = original.data;
+				options.processData = false;
+				options.contentType = false;
+			}else{
+				options.data = (original.data? original.data+'&':'') + 'token=' + encodeURIComponent(token);
+			}
+			}
+		});
 
-			// 3) get the config (URL sound + on/off)
-			fetch('api.php?data=get_config')
-				.then(r => r.json())
-				.then(j => {
-				if(j && j.config){
-					snd.src = j.config.notification_sound_url || '';
-					soundEnabled = (j.config.notification_sound_enabled === '1');
-				}
-				})
-				.catch(()=>{});
+		// if API says 401/410 → back to login
+		$(document).ajaxError(function(_e,xhr){
+			if(xhr && (xhr.status===401 || xhr.status===410)){
+			localStorage.removeItem('token');
+			location.href = '/login/';
+			}
+		});
 
-			// 4) Add automatically token for all requests jQuery to api.php
-			$.ajaxPrefilter(function(options, original, jqXHR){
-				if(!options.url) return;
-				if(options.url.indexOf('api.php') === -1) return; // only for api
-
-				// GET: aaddjoute ?token=...
-				if((options.type || 'GET').toUpperCase() === 'GET'){
-				options.url += (options.url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(token);
-				}else{
-				// POST: append or FormData
-				if(original.data instanceof FormData){
-					original.data.append('token', token);
-					options.data = original.data;
-					options.processData = false;
-					options.contentType = false;
-				}else{
-					options.data = (original.data ? original.data + '&' : '') + 'token=' + encodeURIComponent(token);
-				}
-				}
+		// logout button
+		const logoutBtn = document.querySelector('.logout');
+		if (logoutBtn) {
+			logoutBtn.addEventListener('click', ()=>{
+			localStorage.removeItem('token');
+			location.href = '/login/';
 			});
+		}
 
-			// 5) if servor respond is 401/410 => back to login
-			$(document).ajaxError(function(_e, xhr){
-				if(xhr && (xhr.status === 401 || xhr.status === 410)){
-				localStorage.removeItem('token');
-				location.href = 'login.html';
-				}
-			});
+		window.APP_AUTH = { token, snd: document.getElementById('notify'), soundEnabled:false };
+		})();
+		</script>
 
-			window.APP_AUTH = { token, soundEnabled, snd };
-			})();
-			</script>
+		<!-- get settings from DB (sound url + on/off) -->
+		<script>
+		(function(){
+		const token = localStorage.getItem('token') || '';
+		fetch('api.php?data=get_settings' + (token? '&token='+encodeURIComponent(token):''))
+			.then(r=>r.ok?r.json():Promise.reject(r.status))
+			.then(j=>{
+			if(!j || !j.settings) return;
+			window.$ = window.$ || {};
+			$.settings = Object.assign($.settings||{}, j.settings);
+			const a = document.getElementById('notify');
+			if (a && $.settings.notification_sound_url) a.src = $.settings.notification_sound_url;
+			// aligne l’état global
+			window.APP_AUTH = window.APP_AUTH || {};
+			window.APP_AUTH.soundEnabled = String($.settings.notification_sound_enabled||'0') === '1';
+			})
+			.catch(()=>{ /* noop */ });
+		})();
+		</script>
+
+		<!-- mark read + seen by -->
+		<script>
+		function markAllVisibleAsRead(){
+		const $msgs = $('#msgs').children();
+		if(!$msgs.length) return;
+		const last = Number($msgs.last().attr('data-id') || 0);
+		if(!last) return;
+		$.post('api.php?data=mark_read', { last_msg_id: last });
+		}
+
+		// en bas → mark read
+		$('#msgs').on('scroll', function(){
+		const el=this;
+		const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+		if(nearBottom) markAllVisibleAsRead();
+		});
+
+		// à l'ouverture d'un chat
+		$(document).on('chat:loaded', ()=> markAllVisibleAsRead());
+
+		// “seen by” (debug minimal)
+		$('#msgs').on('click','.message',function(){
+		const mid = $(this).attr('data-id');
+		if(!mid) return;
+		$.getJSON('api.php?data=get_readers',{ message_id: mid })
+		.done(j=>{
+			const list = (j.readers||[]).map(r=>`${r.username} at ${r.read_at}`).join('\n') || 'No readers yet';
+			alert(list);
+		});
+		});
+		</script>
+
 		<script src="./assets/js/main.js?v=<?php echo time(); ?>"></script>
 		
 	</body>

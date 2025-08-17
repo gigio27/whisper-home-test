@@ -1,58 +1,88 @@
-<!doctype html><html lang="en"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Sign in</title>
-<style>body{font-family:system-ui,Arial,sans-serif;max-width:560px;margin:40px auto;padding:0 16px}.card{border:1px solid #ddd;border-radius:12px;padding:16px}.row{margin:12px 0}button,input{padding:10px 14px;border:1px solid #ccc;border-radius:10px}input{width:100%}button{background:#fff;cursor:pointer}</style>
-</head><body>
-<h1>Sign in</h1>
-<div class="card">
-  <div class="row">
-    <label>Email</label>
-    <input id="email" type="email" placeholder="your@email.com" autocomplete="username"/>
-    <input id="website" type="text" style="display:none"/>
-  </div>
-  <div class="row"><button id="req">Send verification code</button> <span id="m1"></span></div>
-  <hr/>
-  <div class="row"><label>Verification code</label><input id="otp" type="text" inputmode="numeric" placeholder="6-digit code"/></div>
-  <div class="row"><button id="ver">Verify & continue</button> <span id="m2"></span></div>
-</div>
-<script>
-const $=id=>document.getElementById(id);
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Sign in</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"/>
+    <style>
+      .hp{display:none!important}
+      .muted{opacity:.75}
+    </style>
+  </head>
+  <body>
+    <div id="root" class="container" style="max-width:520px;margin-top:6rem"></div>
 
-$('req').onclick=async()=>{
-  $('m1').textContent='Sending...';
-  try{
-    const fd=new FormData();
-    fd.append('action','request_otp');
-    fd.append('email',$('email').value.trim());
-    fd.append('website',$('website').value);
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script>
+      const e = React.createElement;
+      function App(){
+        const [email,setEmail]=React.useState('');
+        const [otp,setOtp]=React.useState('');
+        const [msg,setMsg]=React.useState('');
+        const [sending,setSending]=React.useState(false);
+        const [verifying,setVerifying]=React.useState(false);
+        const [cooldown,setCooldown]=React.useState(0);
+        const hp = React.useRef(null);
 
-    const r=await fetch('otp.php',{method:'POST',body:fd}); // note: sans slash initial
-    const t=await r.text();
-    let j; try { j=JSON.parse(t); } catch (e) { j={ error:`request failed (${r.status})` }; }
-    $('m1').textContent=j.message||j.error||'Done';
-    if(j.dev_hint_otp) $('m1').textContent+=` (DEV: ${j.dev_hint_otp})`;
-  }catch(e){
-    console.error(e);
-    $('m1').textContent='Failed to send code';
-  }
-};
+        React.useEffect(()=>{
+          if(!cooldown) return;
+          const t=setInterval(()=>setCooldown(c=>Math.max(0,c-1)),1000);
+          return ()=>clearInterval(t);
+        },[cooldown]);
 
-$('ver').onclick=async()=>{
-  $('m2').textContent='Verifying...';
-  try{
-    const fd=new FormData();
-    fd.append('action','verify_otp');
-    fd.append('email',$('email').value.trim());
-    fd.append('otp',$('otp').value.trim());
-    const r=await fetch('otp.php',{method:'POST',body:fd});
-    const t=await r.text();
-    let j; try { j=JSON.parse(t); } catch (e) { j={ error:`verify failed (${r.status})` }; }
-    if(j.token){ localStorage.setItem('token', j.token); location.href = 'index.php'; }
-    else { $('m2').textContent=j.error||'Failed'; }
-  }catch(e){
-    console.error(e);
-    $('m2').textContent='Verify failed';
-  }
-};
-</script>
-</body></html>
+        async function reqOtp(){
+          setSending(true); setMsg('Sending…');
+          try{
+            const fd=new FormData();
+            fd.append('action','request_otp');
+            fd.append('email',email.trim());
+            fd.append('website',hp.current.value); // honeypot
+            const r=await fetch('/otp.php',{method:'POST',body:fd});
+            const t=await r.text();
+            let j; try{ j=JSON.parse(t);}catch(_){ j={error:`request failed (${r.status})`}; }
+            setMsg(j.message||j.error||'Done');
+            if(j.dev_hint_otp) setMsg(m=>m+` (DEV: ${j.dev_hint_otp})`);
+            if(!j.error) setCooldown(30);
+          }catch(err){ setMsg('Network error'); }
+          setSending(false);
+        }
+        async function verify(){
+          setVerifying(true); setMsg('Verifying…');
+          try{
+            const fd=new FormData();
+            fd.append('action','verify_otp');
+            fd.append('email',email.trim());
+            fd.append('otp',otp.trim());
+            const r=await fetch('/otp.php',{method:'POST',body:fd});
+            const t=await r.text();
+            let j; try{ j=JSON.parse(t);}catch(_){ j={error:`verify failed (${r.status})`}; }
+            if(j.token){ localStorage.setItem('token',j.token); location.href='/index.php'; }
+            else setMsg(j.error||'Failed');
+          }catch(err){ setMsg('Network error'); }
+          setVerifying(false);
+        }
+
+        return e(React.Fragment, null,
+          e('h1',null,'Sign in'),
+          e('label',{className:'form-label mt-2'},'Email'),
+          e('input',{type:'email',className:'form-control',placeholder:'you@example.com',value:email,onChange:v=>setEmail(v.target.value)}),
+          e('input',{type:'text',name:'website',ref:hp,className:'hp',autoComplete:'off',tabIndex:-1}), /* honeypot */
+          e('button',{className:'btn btn-primary mt-3',onClick:reqOtp,disabled:sending||!email||cooldown>0},
+            sending? 'Sending…' : (cooldown? `Send again in ${cooldown}s` : 'Send verification code')
+          ),
+
+          e('hr',{className:'my-4'}),
+
+          e('label',{className:'form-label'},'Verification code'),
+          e('input',{type:'text',className:'form-control',placeholder:'6-digit code',value:otp,onChange:v=>setOtp(v.target.value)}),
+          e('button',{className:'btn btn-success mt-3',onClick:verify,disabled:verifying||!otp}, verifying?'Verifying…':'Verify & continue'),
+
+          e('p',{className:'mt-3 muted'}, msg)
+        );
+      }
+      ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+    </script>
+  </body>
+</html>

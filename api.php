@@ -161,6 +161,37 @@
 	$res=$s->get_result(); $rows=[]; while($r=$res->fetch_assoc()) $rows[]=$r;
 	api_json(200,["readers"=>$rows]);
 	}
+
+	// config côté client (son on/off + url)
+	if(($_GET['data']??'')==='get_settings'){
+	$r=api_db()->query("SELECT setting,value FROM config WHERE setting IN ('notification_sound_url','notification_sound_enabled')");
+	$o=[]; while($row=$r->fetch_assoc()) $o[$row['setting']]=$row['value'];
+	api_json(200,["settings"=>$o]);
+	}
+
+	// marquer comme lu (tous les messages reçus jusqu'à last_msg_id)
+	if(($_GET['data']??'')==='mark_read' && $_SERVER['REQUEST_METHOD']==='POST'){
+	$u=require_token();
+	$last=(int)($_POST['last_msg_id']??0);
+	if($last<=0) api_json(400,["error"=>"last_msg_id is required"]);
+	// on marque seulement les messages de cette personne
+	$s=api_db()->prepare("SELECT row_id FROM messages WHERE belongs_to_username=? AND row_id<=? AND is_from_me=0");
+	$s->bind_param("si",$u,$last); $s->execute(); $res=$s->get_result();
+	$ins=api_db()->prepare("INSERT INTO messages_read(message_id,username,read_at) VALUES(?,?,NOW()) ON DUPLICATE KEY UPDATE read_at=VALUES(read_at)");
+	while($r=$res->fetch_assoc()){ $mid=(int)$r['row_id']; $ins->bind_param("is",$mid,$u); $ins->execute(); }
+	api_json(200,["status"=>"ok","last"=>$last]);
+	}
+
+	// qui a lu (utile pour une alerte rapide)
+	if(($_GET['data']??'')==='get_readers'){
+	$u=require_token();
+	$mid=(int)($_GET['message_id']??0);
+	if($mid<=0) api_json(400,["error"=>"message_id is required"]);
+	$s=api_db()->prepare("SELECT username, read_at FROM messages_read WHERE message_id=? ORDER BY read_at ASC");
+	$s->bind_param("i",$mid); $s->execute();
+	$res=$s->get_result(); $rows=[]; while($r=$res->fetch_assoc()) $rows[]=$r;
+	api_json(200,["readers"=>$rows]);
+	}
 	
 	include_all_plugins("api.php");
 	die();
