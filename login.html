@@ -47,7 +47,7 @@ $('ver').onclick=async()=>{
     const r=await fetch('otp.php',{method:'POST',body:fd});
     const t=await r.text();
     let j; try { j=JSON.parse(t); } catch (e) { j={ error:`verify failed (${r.status})` }; }
-    if(j.token){ localStorage.setItem('token',j.token); location.href='app.html'; }
+    if(j.token){ localStorage.setItem('token', j.token); location.href = 'index.php'; }
     else { $('m2').textContent=j.error||'Failed'; }
   }catch(e){
     console.error(e);

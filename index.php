@@ -44,6 +44,7 @@
 				</div>
 				<!--chats -->
 				<div id="chats" class="chat-list"></div>
+				<audio id="notify" preload="auto"></audio>
 			</div>
 
 			<div id="chat_window" class="right-container col-md-8">
@@ -93,6 +94,59 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.4/jquery-confirm.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/plyr/3.7.8/plyr.min.js"></script>
 
+		<script>
+			(function(){
+			// 1) token mandatory
+			const token = localStorage.getItem('token');
+			if(!token){ location.href = 'login.html'; return; }
+
+			// 2) play sound on new notification
+			const snd = document.getElementById('notify');
+			let soundEnabled = false;
+
+			// 3) get the config (URL sound + on/off)
+			fetch('api.php?data=get_config')
+				.then(r => r.json())
+				.then(j => {
+				if(j && j.config){
+					snd.src = j.config.notification_sound_url || '';
+					soundEnabled = (j.config.notification_sound_enabled === '1');
+				}
+				})
+				.catch(()=>{});
+
+			// 4) Add automatically token for all requests jQuery to api.php
+			$.ajaxPrefilter(function(options, original, jqXHR){
+				if(!options.url) return;
+				if(options.url.indexOf('api.php') === -1) return; // only for api
+
+				// GET: aaddjoute ?token=...
+				if((options.type || 'GET').toUpperCase() === 'GET'){
+				options.url += (options.url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(token);
+				}else{
+				// POST: append or FormData
+				if(original.data instanceof FormData){
+					original.data.append('token', token);
+					options.data = original.data;
+					options.processData = false;
+					options.contentType = false;
+				}else{
+					options.data = (original.data ? original.data + '&' : '') + 'token=' + encodeURIComponent(token);
+				}
+				}
+			});
+
+			// 5) if servor respond is 401/410 => back to login
+			$(document).ajaxError(function(_e, xhr){
+				if(xhr && (xhr.status === 401 || xhr.status === 410)){
+				localStorage.removeItem('token');
+				location.href = 'login.html';
+				}
+			});
+
+			window.APP_AUTH = { token, soundEnabled, snd };
+			})();
+			</script>
 		<script src="./assets/js/main.js?v=<?php echo time(); ?>"></script>
 		
 	</body>
