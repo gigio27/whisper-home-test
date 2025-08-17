@@ -30,6 +30,75 @@
 	#endregion start
 	
 	switch($data){
+	
+	case "get_settings":
+	{
+		// optionnel: protège si tu veux
+		// $u = require_token();
+
+		$r = api_db()->query(
+		"SELECT setting,value
+		FROM config
+		WHERE setting IN ('notification_sound_url','notification_sound_enabled')"
+		);
+		$o = [];
+		while ($row = $r->fetch_assoc()) $o[$row['setting']] = $row['value'];
+		api_json(200, ["settings" => $o]);
+	}
+	break;
+
+	case "mark_read":
+	{
+		if ($_SERVER['REQUEST_METHOD'] !== 'POST') api_json(405, ["error"=>"POST required"]);
+		$u    = require_token();
+		$last = (int)($_POST['last_msg_id'] ?? 0);
+		if ($last <= 0) api_json(400, ["error"=>"last_msg_id is required"]);
+
+		// on marque tous les messages reçus (pas ceux envoyés) jusqu’à last_id
+		$s = api_db()->prepare(
+		"SELECT row_id FROM messages
+		WHERE belongs_to_username=? AND row_id<=? AND is_from_me=0"
+		);
+		$s->bind_param("si", $u, $last);
+		$s->execute();
+		$res = $s->get_result();
+
+		$ins = api_db()->prepare(
+		"INSERT INTO messages_read(message_id,username,read_at)
+		VALUES(?,?,NOW())
+		ON DUPLICATE KEY UPDATE read_at=VALUES(read_at)"
+		);
+		while ($r = $res->fetch_assoc()) {
+		$mid = (int)$r['row_id'];
+		$ins->bind_param("is", $mid, $u);
+		$ins->execute();
+		}
+		api_json(200, ["status"=>"ok", "last"=>$last]);
+	}
+	break;
+
+	case "get_readers":
+	{
+		$u   = require_token();
+		$mid = (int)($_GET['message_id'] ?? 0);
+		if ($mid <= 0) api_json(400, ["error"=>"message_id is required"]);
+
+		$s = api_db()->prepare(
+		"SELECT username, read_at
+		FROM messages_read
+		WHERE message_id=?
+		ORDER BY read_at ASC"
+		);
+		$s->bind_param("i", $mid);
+		$s->execute();
+		$res = $s->get_result();
+
+		$rows = [];
+		while ($r = $res->fetch_assoc()) $rows[] = $r;
+		api_json(200, ["readers"=>$rows]);
+	}
+	break;
+
 
 	case "get_chats":
 		$username = require_token();
@@ -192,7 +261,28 @@
 	$res=$s->get_result(); $rows=[]; while($r=$res->fetch_assoc()) $rows[]=$r;
 	api_json(200,["readers"=>$rows]);
 	}
-	
+
+	// --- get_settings: expose les réglages nécessaires au client (son) ---
+	if (($_GET['data'] ?? $_POST['data'] ?? '') === 'get_settings') {
+		// si tu veux le protéger, décommente la ligne suivante :
+		// $user = require_token();
+
+		$res = api_db()->query(
+		"SELECT setting, value 
+		FROM config 
+		WHERE setting IN ('notification_sound_url','notification_sound_enabled')"
+		);
+		$out = [];
+		while ($row = $res->fetch_assoc()) {
+			$out[$row['setting']] = $row['value'];
+		}
+		api_json(200, ["settings" => $out]);
+		// IMPORTANT: sortir ici pour ne pas retomber sur le 400 par défaut
+		return;
+	}
+
+
+
 	include_all_plugins("api.php");
 	die();
 ?>
